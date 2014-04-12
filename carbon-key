@@ -1,0 +1,148 @@
+#!/usr/bin/env ruby
+
+SYNOPSIS = <<-SYN
+TODO: a high level explanation of what this script does.
+SYN
+
+require 'optparse'
+
+require 'eventmachine'
+require 'em-logger'
+
+def main(options)
+    puts "Listening on #{options[:bind]}:#{options[:port]}",
+        "Upstream is #{options[:upstream_host]}:#{options[:upstream_port]}",
+        "API Keys: #{options[:api_keys].join(' ')}",
+        "Stop with Ctrl-C"
+
+    $upstream   = Upstream::UDP.new options[:upstream_host], options[:upstream_port]
+    $validator  = Validator.new options[:api_keys]
+
+    EventMachine.run {
+      Signal.trap("INT")  { EventMachine.stop; puts '' }
+      Signal.trap("TERM") { EventMachine.stop; puts '' }
+
+      EventMachine.start_server options[:bind], options[:port], CarbonKey
+    }
+end
+
+class Validator
+  def initialize(keys)
+    @regex = /^(#{ Array(keys).join('|') })\.(.*)/.freeze
+  end
+
+  def scan(message)
+    message[@regex, 2]
+  end
+end
+
+module Upstream
+  class UDP
+    def initialize(host, port)
+      @socket = UDPSocket.new
+      @host = host
+      @port = port
+    end
+
+    def send(message)
+      @socket.send(message, 0, @host, @port)
+    end
+  end
+end
+
+module CarbonKey
+    include EM::P::LineProtocol
+
+    # def post_init
+    #   $stderr.puts "-- someone connected to the echo server!"
+    # end
+
+    def receive_line line
+      # $stderr.puts "Processing #{data.inspect}"
+
+      if authorized_payload = $validator.scan(line)
+          $stderr.puts "Sending authorized payload #{authorized_payload.inspect}"
+          $upstream.send authorized_payload
+      else
+          $stderr.puts "Dropping unauthorized message #{line.inspect}"
+      end
+    end
+
+    # def unbind
+    #   $stderr.puts "-- someone disconnected from the echo server!"
+    # end
+end
+
+def parse_options!(argv)
+    # defaults
+    options = {
+        :action => :perform,
+        :api_keys => [],
+        :bind => '0.0.0.0',
+        :port => '2002',
+        :upstream_host => '0.0.0.0',
+        :upstream_port => '2003',
+    }
+
+    parser = OptionParser.new do |opts|
+        opts.banner = [
+            SYNOPSIS,
+            "",
+        ].join("\n")
+
+        opts.separator "Options:"
+
+        # TODO your script options
+
+        # More examples at http://apidock.com/ruby/OptionParser
+
+        opts.on("--port PORT", Integer, "Port to listen on. Defaults to #{options[:port]}") do |value|
+          options[:port] = value
+        end
+
+        opts.on("--bind ADDR", "Bind address. Defaults to #{options[:bind]}") do |value|
+          options[:bind] = value
+        end
+
+        opts.on("--key API_KEY", "A valid API key. Can be used multiple times. If none is provided API key is 'deadbeef.'") do |value|
+          options[:api_keys] << value
+        end
+
+        opts.on("--upstream-port PORT", Integer, "Upstream carbon port. Defaults to #{options[:upstream_port]}") do |value|
+          options[:upstream_port] = value
+        end
+
+        opts.on("--upstream-host HOST", "Upstream carbon host. Defaults to #{options[:upstream_host]}") do |value|
+          options[:upstream_host] = value
+        end
+
+        opts.on_tail("--debug", "Run in debug mode") do
+          ENV['DEBUG'] = 'true'
+        end
+
+        opts.on_tail('-h', "--help", "Display help") do
+          options[:action] = :help
+        end
+
+    end
+
+    parser.parse!(argv)
+
+    if :help == options[:action]
+        puts parser.to_s
+        exit
+    end
+
+    if [] == options[:api_keys]
+        options[:api_keys] << 'deadbeef'
+    end
+
+    options
+end
+
+begin
+    main( parse_options!(ARGV) )
+rescue Interrupt => ex
+  puts "Aborted"
+end
+

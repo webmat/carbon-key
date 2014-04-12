@@ -1,0 +1,21 @@
+#!/usr/bin/env ruby
+
+require 'eventmachine'
+bind = '0.0.0.0'
+port = 2003
+
+class UDPCat < EM::Connection
+  def receive_data(data)
+    puts data
+  end
+end
+
+puts "Listening on #{bind}:#{port}"
+puts "Stop with Ctrl-C"
+
+EventMachine.run {
+  Signal.trap("INT")  { EventMachine.stop; puts '' }
+  Signal.trap("TERM") { EventMachine.stop; puts '' }
+
+  EventMachine.open_datagram_socket(bind, port, UDPCat)
+}
