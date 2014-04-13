@@ -2,9 +2,15 @@
 
 SYNOPSIS = <<-SYN
 Acts as a front-end to a publicly available carbon socket (the Graphite daemon that receives data).
+
+Example:
 carbon-key --key deadbeef
     Will accept metrics that are prepended by "deadbeef." and send the payload upstream (without the API key).
-
+    So sending:
+        "deadbeef.mysql.myserver.replication-lag 1 -1"
+    Will forward the following to the actual carbon socket:
+        "mysql.myserver.replication-lag 1 -1"
+    And will ignore anything that doesn't include the API key.
 SYN
 
 require 'optparse'
