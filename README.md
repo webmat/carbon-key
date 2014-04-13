@@ -1,28 +1,20 @@
-# Carbon::Socket
+# carbon-key
 
-TODO: Write a gem description
+
 
 ## Installation
 
-Add this line to your application's Gemfile:
+Install it:
 
-    gem 'carbon-socket'
-
-And then execute:
-
-    $ bundle
-
-Or install it yourself as:
-
-    $ gem install carbon-socket
+    $ gem install carbon-key
 
 ## Usage
 
-TODO: Write usage instructions here
+Do not use (yet).
 
 ## Contributing
 
-1. Fork it ( https://github.com/[my-github-username]/carbon-socket/fork )
+1. Fork it ( https://github.com/webmat/carbon-key/fork )
 2. Create your feature branch (`git checkout -b my-new-feature`)
 3. Commit your changes (`git commit -am 'Add some feature'`)
 4. Push to the branch (`git push origin my-new-feature`)
