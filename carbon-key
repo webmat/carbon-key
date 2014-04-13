@@ -1,7 +1,10 @@
 #!/usr/bin/env ruby
 
 SYNOPSIS = <<-SYN
-TODO: a high level explanation of what this script does.
+Acts as a front-end to a publicly available carbon socket (the Graphite daemon that receives data).
+carbon-key --key deadbeef
+    Will accept metrics that are prepended by "deadbeef." and send the payload upstream (without the API key).
+
 SYN
 
 require 'optparse'
