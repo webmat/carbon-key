@@ -7,6 +7,7 @@ SYN
 require 'optparse'
 
 require 'eventmachine'
+require 'logger'
 require 'em-logger'
 
 def main(options)
@@ -15,12 +16,17 @@ def main(options)
         "API Keys: #{options[:api_keys].join(' ')}",
         "Stop with Ctrl-C"
 
+    stream = Logger.new(STDOUT)
+    stream.level = options[:log_level]
+    $logger = EM::Logger.new(stream)
+
     $upstream   = Upstream::UDP.new options[:upstream_host], options[:upstream_port]
     $validator  = Validator.new options[:api_keys]
+    $stats      = Hash.new(0)
 
     EventMachine.run {
-      Signal.trap("INT")  { EventMachine.stop; puts '' }
-      Signal.trap("TERM") { EventMachine.stop; puts '' }
+      Signal.trap("INT")  { EventMachine.stop; puts 'Aborted by signal INT' }
+      Signal.trap("TERM") { EventMachine.stop; puts 'Aborted by signal TERM' }
 
       EventMachine.start_server options[:bind], options[:port], CarbonKey
     }
@@ -50,38 +56,62 @@ module Upstream
   end
 end
 
+class Object
+    def safe_inspect
+        value = inspect
+        if value.length > 100
+            "#{value[0..99]}... (#{value.length} chars)\""
+        else
+            value
+        end
+    end
+end
+
 module CarbonKey
     include EM::P::LineProtocol
 
-    # def post_init
-    #   $stderr.puts "-- someone connected to the echo server!"
-    # end
-
-    def receive_line line
-      # $stderr.puts "Processing #{data.inspect}"
-
-      if authorized_payload = $validator.scan(line)
-          $stderr.puts "Sending authorized payload #{authorized_payload.inspect}"
-          $upstream.send authorized_payload
-      else
-          $stderr.puts "Dropping unauthorized message #{line.inspect}"
-      end
+    def remote_address
+        return @remote_address if @remote_address
+        port, @remote_address = Socket.unpack_sockaddr_in(get_peername)
+        @remote_address
     end
 
-    # def unbind
-    #   $stderr.puts "-- someone disconnected from the echo server!"
-    # end
+    def post_init
+        $stats[:connections] += 1
+        $logger.debug { "Connected: #{remote_address}" }
+    end
+
+    def receive_line line
+        $stats[:lines_received] += 1
+
+        if authorized_payload = $validator.scan(line)
+            $stats[:authorized_payloads] += 1
+            $logger.debug "Forwarding authorized payload from #{remote_address}: #{authorized_payload.safe_inspect}"
+
+            $upstream.send authorized_payload
+
+        else
+            $stats[:unauthorized_payloads] += 1
+            $logger.info "Dropping unauthorized payload from #{remote_address}: #{line.safe_inspect}"
+        end
+    end
+
+    def unbind
+        $stats[:disconnections] += 1
+        $logger.debug { "Disconnected: #{remote_address}" }
+    end
 end
 
 def parse_options!(argv)
     # defaults
     options = {
-        :action => :perform,
-        :api_keys => [],
-        :bind => '0.0.0.0',
-        :port => '2002',
-        :upstream_host => '0.0.0.0',
-        :upstream_port => '2003',
+        :action         => :perform,
+        :api_keys       => [],
+        :bind           => '0.0.0.0',
+        :port           => '2002',
+        :upstream_host  => '0.0.0.0',
+        :upstream_port  => '2003',
+        :log_level      => Logger::INFO,
     }
 
     parser = OptionParser.new do |opts|
@@ -116,8 +146,19 @@ def parse_options!(argv)
           options[:upstream_host] = value
         end
 
-        opts.on_tail("--debug", "Run in debug mode") do
-          ENV['DEBUG'] = 'true'
+        opts.on("--log FILE", "Log to a file instead of stdout.") do |value|
+          options[:log] = value
+        end
+
+        opts.on("--log-level LEVEL", "Log level. Default is info. Supports all of Ruby's Logger levels.") do |value|
+          level_name = value.upcase
+          if Logger.const_defined?(level_name) && Logger.const_get(level_name).is_a?(Integer)
+            options[:log_level] = Logger.const_get(level_name)
+          end
+        end
+
+        opts.on_tail("--debug", "Shorthand for --log-level=debug") do |value|
+          options[:log_level] = Logger::DEBUG
         end
 
         opts.on_tail('-h', "--help", "Display help") do
@@ -137,12 +178,11 @@ def parse_options!(argv)
         options[:api_keys] << 'deadbeef'
     end
 
+    if Logger::DEBUG == options[:log_level]
+        begin ; require 'pry' ; rescue LoadError ; end
+    end
+
     options
 end
 
-begin
-    main( parse_options!(ARGV) )
-rescue Interrupt => ex
-  puts "Aborted"
-end
-
+main( parse_options!(ARGV) )
