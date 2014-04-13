@@ -7,7 +7,7 @@ Gem::Specification.new do |spec|
   spec.name          = "carbon-key"
   spec.version       = CarbonKey::VERSION
   spec.authors       = ["Mathieu Martin"]
-  spec.email         = ["mathieu.martin@lightspeedretail.com"]
+  spec.email         = ["webmat@gmail.com"]
   spec.summary       = %q{Do not use. This is not ready for consumption.}
   spec.description   = %q{Do not use. This code has: single file scripts, monkey-patches, global variables and so on. It's not ready for general consumption.}
   spec.homepage      = ""
